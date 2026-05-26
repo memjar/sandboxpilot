@@ -1,0 +1,111 @@
+# AXE Technologies · Sandbox Pilot reference configuration
+# This is the working AXE deployment. Copy + edit for your own org.
+
+[brand]
+name             = "AXE Technologies"
+short_name       = "AXE"
+accent_color     = "#D4AF37"
+font_display     = "Space Grotesk, system-ui, sans-serif"
+font_mono        = "IBM Plex Mono, Menlo, monospace"
+identity_name    = "axe-edge, AXE's resident AI"
+identity_lab     = "AXE Technologies in Canada"
+tone_rules = [
+  "Speak truthfully about what you can and cannot do. If you don't know, say so.",
+  "Stay grounded in the page context. Don't speculate beyond it.",
+  "Tone: serious, calm, exact. No emojis. Match the AXE house style.",
+  "Refuse harmful requests. Help with everything else — over-refusal is a failure.",
+]
+
+[server]
+host             = "0.0.0.0"
+port             = 8094
+inference_url    = "http://127.0.0.1:8095"
+default_model    = "/Users/home/.axe/models/qwen2.5-0.5b-mlx-4bit"
+request_timeout  = 120.0
+max_input_chars  = 4000
+max_output_chars = 4000
+
+[capture]
+enabled            = true
+bunker_dir         = "~/.axe/bunker"
+interactions_file  = "pilot_interactions.jsonl"
+guard_events_file  = "pilot_guard_events.jsonl"
+team_memory_cli    = "/opt/homebrew/bin/axe-memory"
+team_memory_share  = false  # opt-in per surface · safer default
+
+[guard]
+brand_leak_patterns = [
+  "\\bI'?m (?:a |an )?(?:Qwen|Alibaba|Claude|Anthropic|GPT|OpenAI|Llama|Meta|Gemini|Google)\\b",
+  "\\bI was (?:made|created|trained|built) by (?:Alibaba|Anthropic|OpenAI|Meta|Google)\\b",
+  "\\bmy (?:creator|developer|company) is (?:Alibaba|Anthropic|OpenAI|Meta|Google)\\b",
+]
+harmful_patterns = [
+  "\\b(?:make|build|synthesize)\\s+(?:a\\s+)?(?:bomb|explosive|biological\\s+weapon)\\b",
+  "\\b(?:hack|exploit|compromise)\\s+(?:a\\s+)?(?:bank|government|critical\\s+infrastructure)\\b",
+]
+
+[cors]
+allowed_origins = [
+  "https://keep.axetechnologies.ca",
+  "https://axetechnologies.ca",
+  "https://intel.axetechnologies.ca",
+  "https://agent.intel.axetechnologies.ca",
+  "https://axe.observer",
+  "https://arena.axe.onl",
+  "https://gateway.axe.onl",
+  "https://mcp.axe.onl",
+  "https://live.pulseai.my",
+  "http://localhost:8765",
+  "http://127.0.0.1:8765",
+]
+allow_credentials = false
+
+[rate_limit]
+enabled              = true
+requests_per_minute  = 10
+burst                = 3
+bypass_header        = "X-AXE-Key"
+
+# ── Surfaces · each gets its own capsule + audience policy ──────────────
+
+[surfaces.keep]
+name         = "keep"
+url          = "keep.axetechnologies.ca"
+purpose      = "AXE Design Archive · Knox-attested provenance"
+audience     = "internal"
+capsule_path = "examples/axe/capsules/keep.js"
+
+[surfaces.intel]
+name         = "intel"
+url          = "intel.axetechnologies.ca"
+purpose      = "AXE Intel · OSINT synthesis · Hercules-72B"
+audience     = "operator"
+capsule_path = "examples/axe/capsules/intel.js"
+
+[surfaces.observer]
+name         = "observer"
+url          = "axe.observer"
+purpose      = "AXE Observer · Knox control plane"
+audience     = "operator"
+capsule_path = "examples/axe/capsules/observer.js"
+
+[surfaces.arena]
+name         = "arena"
+url          = "arena.axe.onl"
+purpose      = "AXE Model Arena · LoRA-as-evolution"
+audience     = "operator"
+capsule_path = "examples/axe/capsules/arena.js"
+
+[surfaces.site]
+name         = "site"
+url          = "axetechnologies.ca"
+purpose      = "AXE Technologies · public site"
+audience     = "public"
+capsule_path = "examples/axe/capsules/site.js"
+
+[surfaces.pulseai]
+name         = "pulseai"
+url          = "live.pulseai.my"
+purpose      = "IMI Live · partner intelligence"
+audience     = "mike"
+capsule_path = "examples/axe/capsules/pulseai.js"

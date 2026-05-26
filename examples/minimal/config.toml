@@ -1,0 +1,18 @@
+# Minimal Sandbox Pilot config — single surface, defaults for everything else
+
+[brand]
+name          = "Acme"
+identity_name = "Acme's AI assistant"
+identity_lab  = "Acme Corp"
+
+[server]
+inference_url = "http://localhost:8095"
+default_model = "your/model/path"
+
+[capture]
+bunker_dir = "./bunker"
+
+[surfaces.docs]
+url     = "docs.acme.com"
+purpose = "Acme product documentation"
+audience = "developer"
