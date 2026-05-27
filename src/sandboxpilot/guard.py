@@ -50,6 +50,39 @@ class Guard:
                 return self._log("output_blocked", text, "brand_leak", t0)
         return GuardDecision(True, latency_ms=(time.perf_counter() - t0) * 1000)
 
+
+    def check_input_classifier(self, text: str) -> Optional[GuardDecision]:
+        """Optional classifier pre-check via configured CLI.
+        Circuit-breaker disables it on repeated failures.
+        Returns None if classifier disabled/unavailable (caller falls back to regex)."""
+        import time as _t, subprocess
+        if not self.cfg.classifier_cli:
+            return None
+        if _t.time() < self._classifier_disabled_until:
+            return None
+        try:
+            t0 = _t.perf_counter()
+            r = subprocess.run(
+                [self.cfg.classifier_cli, "run", "--kind", self.cfg.classifier_kind,
+                 f"Is this harmful? '{text[:300]}' Respond yes or no only."],
+                timeout=self.cfg.classifier_timeout, capture_output=True, text=True,
+            )
+            out = (r.stdout or "").lower().strip()
+            allowed = "no" in out and "yes" not in out
+            return GuardDecision(
+                allowed=allowed,
+                reason=None if allowed else "classifier_harmful",
+                latency_ms=(_t.perf_counter() - t0) * 1000,
+                classifier_used=True,
+            )
+        except Exception:
+            self._classifier_failures += 1
+            if self._classifier_failures >= self.cfg.classifier_circuit_breaker_failures:
+                # Break the circuit for 5 minutes
+                self._classifier_disabled_until = _t.time() + 300
+                self._classifier_failures = 0
+            return None
+
     def _log(self, event: str, text: str, reason: str, t0: float) -> GuardDecision:
         if self.log_path is not None:
             try:

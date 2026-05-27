@@ -14,6 +14,16 @@ from .guard import Guard
 from .capture import Capture
 from .prompts import build as build_prompt
 
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+    _HAS_SLOWAPI = True
+except ImportError:
+    _HAS_SLOWAPI = False
+
+_rate_buckets: dict = {}
+
 
 class ChatMessage(BaseModel):
     role: str
@@ -38,6 +48,56 @@ class ChatRequest(BaseModel):
     temperature: float = 0.7
 
 
+
+def _enrich_context_with_memory(context_dict: dict, team_memory_cli: str) -> dict:
+    """If a team memory CLI is configured, run a search keyed off the page title
+    and inject top hits into context['related_memories']. Best-effort, never blocks."""
+    if not team_memory_cli:
+        return context_dict
+    page = context_dict.get("page") or {}
+    query = page.get("title") or context_dict.get("surface") or ""
+    if not query:
+        return context_dict
+    try:
+        import subprocess
+        r = subprocess.run(
+            [team_memory_cli, "search", query[:120], "-k", "3"],
+            timeout=2.5, capture_output=True, text=True,
+        )
+        hits = []
+        for line in (r.stdout or "").splitlines():
+            if line.startswith("- ") and len(line) > 4:
+                hits.append(line[2:].strip()[:240])
+        if hits:
+            context_dict["related_memories"] = hits[:3]
+    except Exception:
+        pass
+    return context_dict
+
+
+
+async def _heartbeat_loop(cfg: Config, capture):
+    """Post a pilot_heartbeat event every 60s to the team observer.
+    Best-effort. Uses axe_broadcast.sh if available, otherwise no-op."""
+    import asyncio, subprocess
+    broadcaster = Path.home() / ".axe" / "tools" / "axe_broadcast.sh"
+    if not broadcaster.exists():
+        return
+    while True:
+        try:
+            stats = capture.stats()
+            msg = (f"pilot heartbeat · brand={cfg.brand.name} · port={cfg.server.port} "
+                   f"· internal_captures={stats.get('internal_interactions', 0)} "
+                   f"· external_captures={stats.get('external_interactions', 0)}")
+            subprocess.Popen(
+                ["/bin/bash", str(broadcaster), "--msg", msg],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(60)
+
+
 def build_app(cfg: Config) -> FastAPI:
     """Construct the FastAPI app from a Config. Pure function so it's testable."""
     # Resolve widget dir: src/sandboxpilot/server.py → repo_root/widget
@@ -53,6 +113,9 @@ def build_app(cfg: Config) -> FastAPI:
     capture = Capture(cfg.capture)
 
     app = FastAPI(title="Sandbox Pilot", version="0.1.0")
+
+    # Rate limiting is handled inline in the chat handler via _rate_buckets
+
 
     app.add_middleware(
         CORSMiddleware,
@@ -121,7 +184,27 @@ def build_app(cfg: Config) -> FastAPI:
 
     @app.post("/v1/chat")
     async def chat(req: ChatRequest, request: Request):
-        # 1 · Find latest user message
+        # 0 · Rate limit (simple in-memory token bucket per IP)
+        if cfg.rate_limit.enabled:
+            client_ip = (request.client.host if request.client else "unknown")
+            hv = request.headers.get(cfg.rate_limit.bypass_header.lower())
+            if not (hv and hv in cfg.rate_limit.bypass_keys):
+                import time as _t
+                now = _t.time()
+                bucket = _rate_buckets.setdefault(client_ip, [])
+                # Drop entries older than 60s
+                bucket[:] = [t for t in bucket if now - t < 60]
+                if len(bucket) >= cfg.rate_limit.requests_per_minute:
+                    return JSONResponse(
+                        {"error": "rate_limited",
+                         "limit_per_minute": cfg.rate_limit.requests_per_minute,
+                         "retry_after_s": int(60 - (now - bucket[0]))},
+                        status_code=429,
+                        headers={"Retry-After": "60"},
+                    )
+                bucket.append(now)
+
+                # 1 · Find latest user message
         user_msg = ""
         for m in reversed(req.messages):
             if m.role == "user":
@@ -137,8 +220,9 @@ def build_app(cfg: Config) -> FastAPI:
                 status_code=400,
             )
 
-        # 3 · Build system prompt
-        system = build_prompt(req.context.dict(), cfg.brand)
+        # 3 · Enrich context + build system prompt
+        ctx_dict = _enrich_context_with_memory(req.context.dict(), cfg.capture.team_memory_cli or '')
+        system = build_prompt(ctx_dict, cfg.brand)
         full_messages = [{"role": "system", "content": system}] + [m.dict() for m in req.messages]
 
         # 4 · Stream from upstream inference
@@ -202,5 +286,11 @@ def build_app(cfg: Config) -> FastAPI:
                 })
 
         return StreamingResponse(proxy(), media_type="text/event-stream")
+
+    @app.on_event("startup")
+    async def _start_heartbeat():
+        import asyncio
+        if (Path.home() / ".axe" / "tools" / "axe_broadcast.sh").exists():
+            asyncio.create_task(_heartbeat_loop(cfg, capture))
 
     return app
