@@ -18,7 +18,7 @@
   window.SANDBOX_CONTEXT = {
     surface: "live.pulseai.my",
     surface_purpose: "IMI Live · AXE's auditable AI for partners",
-    audience: "mike",
+    audience: "imi/mike",
     page: {
       url: location.pathname,
       title: document.title,

@@ -11,7 +11,7 @@ def test_default_template():
     assert "Acme Corp" in p
 
 def test_mike_template_branch():
-    p = build({"surface": "live.pulseai.my", "audience": "mike",
+    p = build({"surface": "live.pulseai.my", "audience": "imi/mike",
                "page": {"title": "Home", "url": "/"}}, BRAND)
     assert "120 words or fewer" in p
     assert "Mike" in p

@@ -17,7 +17,7 @@ def test_internal_audience_routes_to_internal_file():
 def test_mike_audience_routes_to_external_file():
     with tempfile.TemporaryDirectory() as td:
         cap = Capture(CaptureConfig(bunker_dir=td))
-        cap.write({"audience": "mike", "messages": [{"role":"user","content":"hi"}], "answer": "hi"})
+        cap.write({"audience": "imi/mike", "messages": [{"role":"user","content":"hi"}], "answer": "hi"})
         internal = Path(td) / "interactions.jsonl"
         external = Path(td) / "external_interactions.jsonl"
         assert external.exists() and sum(1 for _ in open(external)) == 1
@@ -29,9 +29,9 @@ def test_isolation_never_crosses():
         cap = Capture(CaptureConfig(bunker_dir=td))
         for i in range(5):
             cap.write({"audience": "internal", "messages": [], "answer": f"i{i}"})
-            cap.write({"audience": "mike",     "messages": [], "answer": f"m{i}"})
+            cap.write({"audience": "imi/mike",     "messages": [], "answer": f"m{i}"})
         internal_lines = [json.loads(x) for x in open(Path(td)/"interactions.jsonl")]
         external_lines = [json.loads(x) for x in open(Path(td)/"external_interactions.jsonl")]
         assert all(r["audience"] == "internal" for r in internal_lines)
-        assert all(r["audience"] == "mike" for r in external_lines)
+        assert all(r["audience"] == "imi/mike" for r in external_lines)
         assert len(internal_lines) == 5 and len(external_lines) == 5

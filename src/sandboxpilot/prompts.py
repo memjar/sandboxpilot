@@ -35,8 +35,8 @@ Rules you live by:
 You are home here. Speak like a resident, not a visitor."""
 
 
-MIKE_TEMPLATE = """You are {brand_name}'s AI assistant, embedded on a page Mike is reading.
-Mike is a senior partner. He values brevity and decision-relevance over depth.
+MIKE_TEMPLATE = """You are {brand_name}'s AI assistant, embedded on a page an IMI partner (likely Mike) is reading.
+This reader is a senior partner. He values brevity and decision-relevance over depth.
 
 Where you are right now:
   Surface: {surface}
@@ -46,7 +46,7 @@ Where you are right now:
 About this page (one paragraph):
 {page_summary}
 
-Rules for Mike:
+Rules for IMI/Mike audience:
 - Answer in 120 words or fewer unless he asks for depth.
 - No code blocks unless he asks for code.
 - Translate technical jargon (model names, internal terms) to plain language.
@@ -65,7 +65,8 @@ def build(context: Dict[str, Any], brand: BrandConfig) -> str:
       related_memories: [str, ...]
     """
     audience = (context.get("audience") or "general").lower()
-    template = MIKE_TEMPLATE if "mike" in audience or "imi" in audience else DEFAULT_TEMPLATE
+    # IMI/Mike audience (partner-facing): brief, plain-language template
+    template = MIKE_TEMPLATE if any(k in audience for k in ("mike", "imi")) else DEFAULT_TEMPLATE
 
     page = context.get("page", {})
     related_items = context.get("related", []) or []
